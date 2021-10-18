@@ -10,9 +10,15 @@ library(boot)
 library(rpart)
 library(rpart.plot)
 library(randomForest)
+library(bestglm)
 require(caTools)
+library(AMR)
+library(ggfortify)
+install.packages("devtools", repo="http://cran.us.r-project.org")
+library(devtools)
+install_github("vqv/ggbiplot")
 set.seed(1)
-
+library(ggbiplot)
 rm(list=ls())
 importedData <- read.csv(file = "csv_result-Autism-Adult-Data.csv")
 
@@ -54,6 +60,8 @@ for(i in 1:10) {
 }
 pca.out <- prcomp(pca.data, scale = TRUE)
 # plot is flipped, so flip it back
+# pca.out$rotation <- -pca.out$rotation[, c(1,3)]
+# pca.out$x <- -pca.out$x[, c(1,3)]
 pca.out$rotation <- -pca.out$rotation
 pca.out$x <- -pca.out$x
 biplot(pca.out, scale = 0)
@@ -66,6 +74,10 @@ par(mfrow = c(1,2))
 plot(pve, xlab = "Principal Component", ylab = "Proportion of Variance Explained", ylim = c(0,1), type = "b")
 plot(cumsum(pve), xlab = "Principal Component", ylab = "Cumulative Proportion of Variance Explained", ylim = c(0,1), type = "b")
 
+ggplot_pca(pca.out, groups = cleanData$Class.ASD)
+dev.new()
+autoplot(pca.out, loadings = TRUE, loadings.label = TRUE)
+ggbiplot(pca.out, groups = cleanData$Class.ASD, ellipse = TRUE, circle = TRUE)
 ###############################
 # Possible methods: Logistic Regression, Naive Bayes, Classification Tree, Random Forest
 ###############################
@@ -119,6 +131,27 @@ LR.test.sens <- LR.test.table[1,1]/(LR.test.table[1,1] + LR.test.table[2,1])
 LR.test.acc
 LR.test.spec
 LR.test.sens
+
+LR.model <- glm(Class.ASD ~ PC1 + PC3, family = binomial("logit"), trainDat, control = list(maxit = 50))
+LR.prob <- predict(LR.model, newdata = testDat, type = "response")
+LR.pred <- rep(0, dim(testDat)[1])
+LR.pred[LR.prob > .5] <- 1
+LR.test.table <- table(LR.pred, testDat$Class.ASD)
+LR.test.acc <- (LR.test.table[1,1]+LR.test.table[2,2])/sum(LR.test.table)
+LR.test.spec <- LR.test.table[1,1]/(LR.test.table[1,1] + LR.test.table[2,2])
+LR.test.sens <- LR.test.table[1,1]/(LR.test.table[1,1] + LR.test.table[2,1])
+LR.test.acc
+LR.test.spec
+LR.test.sens
+
+
+
+tempData <- trainDat
+tempData$gender <- as.factor(trainDat$gender)
+tempData$jundice <- as.factor(trainDat$jundice)
+tempData$autism <- as.factor(trainDat$autism)
+best.LR <- bestglm(tempData, family = binomial(), IC="CV", t=5)
+best.LR
 
 ###############################
 # Naive Bayes
