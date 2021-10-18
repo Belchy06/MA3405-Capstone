@@ -9,6 +9,8 @@ library(tidyverse)
 library(boot)
 library(rpart)
 library(rpart.plot)
+library(randomForest)
+require(caTools)
 set.seed(1)
 
 rm(list=ls())
@@ -105,6 +107,7 @@ test.acc <- rbind(test.acc, test.acc.temp)
 rowMeans(train.acc)
 rowMeans(test.acc)
 
+trainDat$Class.ASD <- as.factor(trainDat$Class.ASD)
 LR.model <- glm(Class.ASD ~ ., family = binomial("logit"), trainDat, control = list(maxit = 50))
 LR.prob <- predict(LR.model, newdata = testDat, type = "response")
 LR.pred <- rep(0, dim(testDat)[1])
@@ -192,3 +195,34 @@ tree.test.sens
 ###############################
 # Random Forest
 ###############################
+train.acc <- c()
+test.acc <- c()
+train.acc.temp <- c()
+test.acc.temp <- c()
+for(i in 1:nFolds) {
+  RF.model <- naiveBayes(Class.ASD ~ ., data=trainDat[-folds[[i]], ])
+  trainPred <- predict(RF.model, newdata = trainDat[-folds[[i]], ], type = "class")
+  trainTable <- table(trainPred, trainDat[-folds[[i]], ]$Class.ASD)
+  
+  
+  testPred <- predict(RF.model, newdata = trainDat[folds[[i]], ], type = "class")
+  testTable <- table(testPred, trainDat[folds[[i]], ]$Class.ASD)
+  
+  train.acc.temp <- c(train.acc.temp, (trainTable[1,1]+trainTable[2,2])/sum(trainTable))
+  test.acc.temp <- c(test.acc.temp, (testTable[1,1]+testTable[2,2])/sum(testTable))
+}
+train.acc <- rbind(train.acc, train.acc.temp)
+test.acc <- rbind(test.acc, test.acc.temp)
+rowMeans(train.acc)
+rowMeans(test.acc)
+
+RF.model <- randomForest(Class.ASD ~ ., data=trainDat, method = "class")
+RF.pred <- predict(RF.model, newData = testDat, method = "class")
+RF.test.table <- table(RF.pred, trainDat$Class.ASD)
+RF.test.acc <- (RF.test.table[1,1]+RF.test.table[2,2])/sum(RF.test.table)
+RF.test.spec <- RF.test.table[1,1]/(RF.test.table[1,1] + RF.test.table[2,2])
+RF.test.sens <- RF.test.table[1,1]/(RF.test.table[1,1] + RF.test.table[2,1])
+RF.test.acc
+RF.test.spec
+RF.test.sens
+

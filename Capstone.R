@@ -185,3 +185,4 @@ LR.model <- glm(Class.ASD ~., family = binomial("logit"), newData)
 summary(LR.model)
 
 table(augmentedData$age)
+
