@@ -77,7 +77,9 @@ plot(cumsum(pve), xlab = "Principal Component", ylab = "Cumulative Proportion of
 ggplot_pca(pca.out, groups = cleanData$Class.ASD)
 dev.new()
 autoplot(pca.out, loadings = TRUE, loadings.label = TRUE)
-ggbiplot(pca.out, groups = cleanData$Class.ASD, ellipse = TRUE, circle = TRUE)
+groupData <- rep("Not ASD", length(cleanData$Class.ASD))
+groupData[cleanData$Class.ASD == 1] <- "ASD"
+ggbiplot(pca.out, groups = groupData, ellipse = TRUE, circle = FALSE)
 ###############################
 # Possible methods: Logistic Regression, Naive Bayes, Classification Tree, Random Forest
 ###############################
