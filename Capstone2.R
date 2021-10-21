@@ -19,6 +19,8 @@ library(devtools)
 install_github("vqv/ggbiplot")
 set.seed(1)
 library(ggbiplot)
+
+
 rm(list=ls())
 importedData <- read.csv(file = "csv_result-Autism-Adult-Data.csv")
 
@@ -37,8 +39,8 @@ cleanData <- cleanData[!(cleanData$id %in% c(53)), ]
 cleanData <- cleanData[ , !(names(cleanData) %in% c('id',  'used_app_before', 'age_desc', 'relation', 'result'))]
 # Age is a char, let's fix this
 cleanData$age <- as.numeric(cleanData$age)
-# Outcome is a char, change to a numeric 1 or 0 with 1 being yes
-cleanData$Class.ASD <- as.integer(as.factor(cleanData$Class.ASD)) - 1
+# Outcome is a char, change to a factor
+cleanData$Class.ASD <- as.factor(cleanData$Class.ASD)
 
 # Ethnicity has many categories. collapse these to mitigate the curse of dimensionality
 fct_count(cleanData$ethnicity)
@@ -74,11 +76,11 @@ par(mfrow = c(1,2))
 plot(pve, xlab = "Principal Component", ylab = "Proportion of Variance Explained", ylim = c(0,1), type = "b")
 plot(cumsum(pve), xlab = "Principal Component", ylab = "Cumulative Proportion of Variance Explained", ylim = c(0,1), type = "b")
 
-ggplot_pca(pca.out, groups = cleanData$Class.ASD)
-dev.new()
-autoplot(pca.out, loadings = TRUE, loadings.label = TRUE)
-groupData <- rep("Not ASD", length(cleanData$Class.ASD))
-groupData[cleanData$Class.ASD == 1] <- "ASD"
+# ggplot_pca(pca.out, groups = cleanData$Class.ASD)
+# dev.new()
+# autoplot(pca.out, loadings = TRUE, loadings.label = TRUE)
+groupData <- rep("ASD", length(cleanData$Class.ASD))
+groupData[cleanData$Class.ASD] <- "Not ASD"
 ggbiplot(pca.out, groups = groupData, ellipse = TRUE, circle = FALSE)
 ###############################
 # Possible methods: Logistic Regression, Naive Bayes, Classification Tree, Random Forest
@@ -93,13 +95,40 @@ nFolds <- 5
 folds <- createFolds(trainDat$Class.ASD, k = nFolds)
 
 
+
+par(mfrow = c(1,4))
+testResults <- c()
 ###############################
 # Logistic Regression
 ###############################
+# Best subset
+tempData <- trainDat
+tempData$gender <- as.factor(trainDat$gender)
+tempData$jundice <- as.factor(trainDat$jundice)
+tempData$ethnicity <- as.factor(trainDat$ethnicity)
+tempData$autism <- as.factor(trainDat$autism)
+tempData$Class.ASD <- as.integer(trainDat$Class.ASD) - 1
+best.LR <- bestglm(tempData, family = binomial(), IC="AIC")
+best.LR
+
+# Testing with only the significant variables
+LR.model <- glm(Class.ASD ~ PC1 + PC3, family = binomial("logit"), trainDat, control = list(maxit = 50))
+LR.prob <- predict(LR.model, newdata = testDat, type = "response")
+LR.pred <- rep(0, dim(testDat)[1])
+LR.pred[LR.prob > .5] <- 1
+LR.test.table <- table(LR.pred, testDat$Class.ASD)
+LR.test.acc <- (LR.test.table[1,1]+LR.test.table[2,2])/sum(LR.test.table)
+LR.test.spec <- LR.test.table[1,1]/(LR.test.table[1,1] + LR.test.table[1,2])
+LR.test.sens <- LR.test.table[2,2]/(LR.test.table[2,2] + LR.test.table[2,1])
+LR.test.acc
+LR.test.spec
+LR.test.sens
+
+# 5 fold CV
 train.acc <- c()
 test.acc <- c()
 train.acc.temp <- c()
-test.acc.temp <- c()
+LR.test <- c()
 for(i in 1:nFolds) {
   LR.model <- glm(Class.ASD ~ ., family = binomial("logit"), trainDat[-folds[[i]], ], control = list(maxit = 50))
   trainPred <- predict(LR.model, newdata = trainDat[-folds[[i]], ], type = "response")
@@ -114,46 +143,27 @@ for(i in 1:nFolds) {
   testTable <- table(LR.pred, trainDat[folds[[i]], ]$Class.ASD)
   
   train.acc.temp <- c(train.acc.temp, (trainTable[1,1]+trainTable[2,2])/sum(trainTable))
-  test.acc.temp <- c(test.acc.temp, (testTable[1,1]+testTable[2,2])/sum(testTable))
+  LR.test <- c(LR.test, (testTable[1,1]+testTable[2,2])/sum(testTable))
 }
-train.acc <- rbind(train.acc, train.acc.temp)
-test.acc <- rbind(test.acc, test.acc.temp)
-rowMeans(train.acc)
-rowMeans(test.acc)
+train.acc <- cbind(train.acc, train.acc.temp)
+test.acc <- cbind(test.acc, LR.test)
+mean(LR.test)
+testResults <- rbind(testResults, cbind(LR.test, rep("Logistic Regression", 5)))
 
-trainDat$Class.ASD <- as.factor(trainDat$Class.ASD)
+# Testing with the testing set
 LR.model <- glm(Class.ASD ~ ., family = binomial("logit"), trainDat, control = list(maxit = 50))
 LR.prob <- predict(LR.model, newdata = testDat, type = "response")
 LR.pred <- rep(0, dim(testDat)[1])
 LR.pred[LR.prob > .5] <- 1
 LR.test.table <- table(LR.pred, testDat$Class.ASD)
 LR.test.acc <- (LR.test.table[1,1]+LR.test.table[2,2])/sum(LR.test.table)
-LR.test.spec <- LR.test.table[1,1]/(LR.test.table[1,1] + LR.test.table[2,2])
-LR.test.sens <- LR.test.table[1,1]/(LR.test.table[1,1] + LR.test.table[2,1])
-LR.test.acc
-LR.test.spec
-LR.test.sens
-
-LR.model <- glm(Class.ASD ~ PC1 + PC3, family = binomial("logit"), trainDat, control = list(maxit = 50))
-LR.prob <- predict(LR.model, newdata = testDat, type = "response")
-LR.pred <- rep(0, dim(testDat)[1])
-LR.pred[LR.prob > .5] <- 1
-LR.test.table <- table(LR.pred, testDat$Class.ASD)
-LR.test.acc <- (LR.test.table[1,1]+LR.test.table[2,2])/sum(LR.test.table)
-LR.test.spec <- LR.test.table[1,1]/(LR.test.table[1,1] + LR.test.table[2,2])
-LR.test.sens <- LR.test.table[1,1]/(LR.test.table[1,1] + LR.test.table[2,1])
+LR.test.spec <- LR.test.table[1,1]/(LR.test.table[1,1] + LR.test.table[1,2])
+LR.test.sens <- LR.test.table[2,2]/(LR.test.table[2,2] + LR.test.table[2,1])
 LR.test.acc
 LR.test.spec
 LR.test.sens
 
 
-
-tempData <- trainDat
-tempData$gender <- as.factor(trainDat$gender)
-tempData$jundice <- as.factor(trainDat$jundice)
-tempData$autism <- as.factor(trainDat$autism)
-best.LR <- bestglm(tempData, family = binomial(), IC="CV", t=5)
-best.LR
 
 ###############################
 # Naive Bayes
@@ -161,7 +171,7 @@ best.LR
 train.acc <- c()
 test.acc <- c()
 train.acc.temp <- c()
-test.acc.temp <- c()
+NB.test <- c()
 for(i in 1:nFolds) {
   NB.model <- naiveBayes(Class.ASD ~ ., data=trainDat[-folds[[i]], ])
   trainPred <- predict(NB.model, newdata = trainDat[-folds[[i]], ], type = "class")
@@ -172,19 +182,19 @@ for(i in 1:nFolds) {
   testTable <- table(testPred, trainDat[folds[[i]], ]$Class.ASD)
   
   train.acc.temp <- c(train.acc.temp, (trainTable[1,1]+trainTable[2,2])/sum(trainTable))
-  test.acc.temp <- c(test.acc.temp, (testTable[1,1]+testTable[2,2])/sum(testTable))
+  NB.test <- c(NB.test, (testTable[1,1]+testTable[2,2])/sum(testTable))
 }
-train.acc <- rbind(train.acc, train.acc.temp)
-test.acc <- rbind(test.acc, test.acc.temp)
-rowMeans(train.acc)
-rowMeans(test.acc)
+train.acc <- cbind(train.acc, train.acc.temp)
+test.acc <- cbind(test.acc, NB.test)
+mean(NB.test)
+testResults <- rbind(testResults, cbind(NB.test, rep("Naive Bayes", 5)))
 
 NB.model <- naiveBayes(Class.ASD ~ ., data=trainDat)
 NB.pred <- predict(NB.model, newdata = testDat, type = "class")
 NB.test.table <- table(NB.pred, testDat$Class.ASD)
 NB.test.acc <- (NB.test.table[1,1]+NB.test.table[2,2])/sum(NB.test.table)
-NB.test.spec <- NB.test.table[1,1]/(NB.test.table[1,1] + NB.test.table[2,2])
-NB.test.sens <- NB.test.table[1,1]/(NB.test.table[1,1] + NB.test.table[2,1])
+NB.test.spec <- NB.test.table[1,1]/(NB.test.table[1,1] + NB.test.table[1,2])
+NB.test.sens <- NB.test.table[2,2]/(NB.test.table[2,2] + NB.test.table[2,1])
 NB.test.acc
 NB.test.spec
 NB.test.sens
@@ -197,9 +207,9 @@ NB.test.sens
 train.acc <- c()
 test.acc <- c()
 train.acc.temp <- c()
-test.acc.temp <- c()
+CT.test <- c()
 for(i in 1:nFolds) {
-  tree.model <- naiveBayes(Class.ASD ~ ., data=trainDat[-folds[[i]], ])
+  tree.model <- rpart(Class.ASD ~ ., data = trainDat, method = "class")
   trainPred <- predict(tree.model, newdata = trainDat[-folds[[i]], ], type = "class")
   trainTable <- table(trainPred, trainDat[-folds[[i]], ]$Class.ASD)
   
@@ -208,19 +218,20 @@ for(i in 1:nFolds) {
   testTable <- table(testPred, trainDat[folds[[i]], ]$Class.ASD)
   
   train.acc.temp <- c(train.acc.temp, (trainTable[1,1]+trainTable[2,2])/sum(trainTable))
-  test.acc.temp <- c(test.acc.temp, (testTable[1,1]+testTable[2,2])/sum(testTable))
+  CT.test <- c(CT.test, (testTable[1,1]+testTable[2,2])/sum(testTable))
 }
-train.acc <- rbind(train.acc, train.acc.temp)
-test.acc <- rbind(test.acc, test.acc.temp)
-rowMeans(train.acc)
-rowMeans(test.acc)
+train.acc <- cbind(train.acc, train.acc.temp)
+test.acc <- cbind(test.acc, CT.test)
+mean(CT.test)
+testResults <- rbind(testResults, cbind(CT.test, rep("Classification Tree", 5)))
 
+set.seed(2)
 tree.model <- rpart(Class.ASD ~ ., data = trainDat, method = "class")
 tree.pred <- predict(tree.model, newdata = testDat, type = "class")
 tree.test.table <- table(tree.pred, testDat$Class.ASD)
 tree.test.acc <- (tree.test.table[1,1]+tree.test.table[2,2])/sum(tree.test.table)
-tree.test.spec <- tree.test.table[1,1]/(tree.test.table[1,1] + tree.test.table[2,2])
-tree.test.sens <- tree.test.table[1,1]/(tree.test.table[1,1] + tree.test.table[2,1])
+tree.test.spec <- tree.test.table[1,1]/(tree.test.table[1,1] + tree.test.table[1,2])
+tree.test.sens <- tree.test.table[2,2]/(tree.test.table[2,2] + tree.test.table[2,1])
 tree.test.acc
 tree.test.spec
 tree.test.sens
@@ -233,9 +244,9 @@ tree.test.sens
 train.acc <- c()
 test.acc <- c()
 train.acc.temp <- c()
-test.acc.temp <- c()
+RF.test <- c()
 for(i in 1:nFolds) {
-  RF.model <- naiveBayes(Class.ASD ~ ., data=trainDat[-folds[[i]], ])
+  RF.model <- randomForest(Class.ASD ~ ., data=trainDat[-folds[[i]], ], proximity = TRUE)
   trainPred <- predict(RF.model, newdata = trainDat[-folds[[i]], ], type = "class")
   trainTable <- table(trainPred, trainDat[-folds[[i]], ]$Class.ASD)
   
@@ -244,20 +255,31 @@ for(i in 1:nFolds) {
   testTable <- table(testPred, trainDat[folds[[i]], ]$Class.ASD)
   
   train.acc.temp <- c(train.acc.temp, (trainTable[1,1]+trainTable[2,2])/sum(trainTable))
-  test.acc.temp <- c(test.acc.temp, (testTable[1,1]+testTable[2,2])/sum(testTable))
+  RF.test <- c(RF.test, (testTable[1,1]+testTable[2,2])/sum(testTable))
 }
-train.acc <- rbind(train.acc, train.acc.temp)
-test.acc <- rbind(test.acc, test.acc.temp)
-rowMeans(train.acc)
-rowMeans(test.acc)
+train.acc <- cbind(train.acc, train.acc.temp)
+test.acc <- cbind(test.acc, RF.test)
+mean(RF.test)
+testResults <- rbind(testResults, cbind(RF.test, rep("Random Forest", 5)))
 
 RF.model <- randomForest(Class.ASD ~ ., data=trainDat, method = "class")
-RF.pred <- predict(RF.model, newData = testDat, method = "class")
+RF.pred <- predict(RF.model, data = testDat, method = "class")
 RF.test.table <- table(RF.pred, trainDat$Class.ASD)
 RF.test.acc <- (RF.test.table[1,1]+RF.test.table[2,2])/sum(RF.test.table)
-RF.test.spec <- RF.test.table[1,1]/(RF.test.table[1,1] + RF.test.table[2,2])
-RF.test.sens <- RF.test.table[1,1]/(RF.test.table[1,1] + RF.test.table[2,1])
+RF.test.spec <- RF.test.table[1,1]/(RF.test.table[1,1] + RF.test.table[1,2])
+RF.test.sens <- RF.test.table[2,2]/(RF.test.table[2,2] + RF.test.table[2,1])
 RF.test.acc
 RF.test.spec
 RF.test.sens
 
+par(mfrow = c(1,1))
+colnames(testResults) <- c("Accuracy", "Model")
+testResults <- as.data.frame(testResults)
+testResults$Accuracy <- as.numeric(testResults$Accuracy)
+ggplot(testResults, aes(x = Model, y = Accuracy)) + 
+  geom_boxplot() +
+  xlab("Model") +
+  ylab("5-fold Cross Validated Accuracy") +
+  ggtitle("5-fold CV Accuracy Per Model", subtitle = waiver()) +
+  theme(plot.title = element_text(hjust = 0.5))
+  
