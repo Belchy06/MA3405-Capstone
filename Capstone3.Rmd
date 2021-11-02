@@ -1,3 +1,17 @@
+---
+title: "Appendix B - R Code"
+output:
+  pdf_document: default
+  word_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(results = FALSE)
+```
+
+```{r, echo=TRUE, fig.keep='none'}
 library(ggplot2)
 library(ggfortify)
 library(dplyr)
@@ -38,8 +52,6 @@ cleanData <- importedData[apply(importedData, 1, function(row) all(row != '?')),
 cleanData <- cleanData[!(cleanData$id %in% c(53)), ]
 # Remove unnecessary columns
 cleanData <- cleanData[ , !(names(cleanData) %in% c('id',  'used_app_before', 'age_desc', 'relation', 'result'))]
-# Custom data
-cleanData <- rbind(cleanData, c(0,1,0,0,0,0,0,1,0,0,18,"m","White","no","no","Australia","NO"))
 # Age is a char, let's fix this
 cleanData$age <- as.numeric(cleanData$age)
 # Outcome is a char, change to a factor
@@ -53,8 +65,6 @@ cleanData$ethnicity <- fct_collapse(cleanData$ethnicity,
                                     Asian = c("Asian", "South Asian"),
                                     Other = c("others", "Others", "Pasifika", "Hispanic", "Latino"),
 )
-
-
 fct_count(cleanData$ethnicity)
 f <- factor(cleanData$ethnicity, levels = c("White", "Asian", "Black", "Other")) 
 cleanData$ethnicity <- fct_relevel(f)
@@ -85,12 +95,10 @@ plot(cumsum(pve), xlab = "Principal Component", ylab = "Cumulative Proportion of
 groupData <- rep("ASD", length(cleanData$Class.ASD))
 groupData[as.integer(cleanData$Class.ASD) == 1] <- "Not ASD"
 ggbiplot(pca.out, groups = as.factor(groupData), ellipse = TRUE, circle = FALSE)
-
-pca.out$x[609, ]
 ###############################
 # Possible methods: Logistic Regression, Naive Bayes, Classification Tree, Random Forest
 ###############################
-n <- nrow(cleanData) - 1
+n <- nrow(cleanData) -1
 index <- sample(1:n, n*0.8, replace=FALSE)
 trainDat <- cbind(pca.out$x[, 1:3], cleanData[, c(11:15, 17)])[index, ]
 testDat <- cbind(pca.out$x[, 1:3], cleanData[, c(11:15, 17)])[-index, ]
@@ -155,15 +163,9 @@ test.acc <- cbind(test.acc, LR.test)
 mean(LR.test)
 testResults <- rbind(testResults, cbind(LR.test, rep("Logistic Regression", 5)))
 
-z <- as.data.frame(cbind(rbind(pca.out$x[609, 1:3]), cleanData[609, 11], cleanData[609, 14]))
-colnames(z) <- c("PC1", "PC2", "PC3", "age", "jundice")
-z$PC1 <- as.numeric(z$PC1)
-z$PC2 <- as.numeric(z$PC2)
-z$PC3 <- as.numeric(z$PC3)
-z$age <- as.numeric(z$age)
 # Testing with the testing set
 LR.model <- glm(Class.ASD ~ PC1 + PC2 + PC3 + age + jundice, family = binomial("logit"), trainDat, control = list(maxit = 50))
-LR.prob <- predict(LR.model, z, type = "response")
+LR.prob <- predict(LR.model, testDat, type = "response")
 LR.pred <- rep(0, dim(testDat)[1])
 LR.pred[LR.prob > .5] <- 1
 LR.test.table <- table(LR.pred, testDat$Class.ASD)
@@ -303,3 +305,5 @@ plot(roc(Class.ASD ~ tree.prob[, 1], data = testDat), add = TRUE, col = "purple"
 legend("right", c("Logistic Regression", "Naive Bayes", "Random Forest", "Classification Tree"), lty=1, 
        col = c("green", "blue", "orange", "purple"), bty="n", inset=c(0,150))
   
+
+```
